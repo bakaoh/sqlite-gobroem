@@ -3,6 +3,7 @@ package gobroem
 import (
 	"encoding/json"
 	"errors"
+	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +23,43 @@ func NewAPI(dbFile string) (*API, error) {
 		return nil, err
 	}
 	return &API{client, dbFile}, nil
+}
+
+// Handler ...
+func (a *API) Handler(browserRoot string) http.Handler {
+	indexPage, _ := Asset("static/index.html")
+	indexTmpl, _ := template.New("name").Parse(string(indexPage))
+
+	fileServer := http.FileServer(&AssetFS{AssetDir, Asset, "static"})
+	staticHandler := http.StripPrefix(browserRoot, fileServer)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case browserRoot + "api/info":
+			a.Info(w, r)
+		case browserRoot + "api/tables":
+			a.Tables(w, r)
+		case browserRoot + "api/table":
+			a.Table(w, r)
+		case browserRoot + "api/table/info":
+			a.TableInfo(w, r)
+		case browserRoot + "api/table/sql":
+			a.TableSQL(w, r)
+		case browserRoot + "api/table/indexes":
+			a.TableIndexes(w, r)
+		case browserRoot + "api/query":
+			a.Query(w, r)
+		case browserRoot:
+			indexTmpl.Execute(w, map[string]string{"root": browserRoot})
+		default:
+			fileName := strings.Replace(r.URL.Path, browserRoot, "static/", 1)
+			if _, err := Asset(fileName); err == nil {
+				staticHandler.ServeHTTP(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
+		}
+	})
 }
 
 // Info ...
@@ -64,7 +102,7 @@ func (a *API) Tables(w http.ResponseWriter, req *http.Request) {
 
 // Table ...
 func (a *API) Table(w http.ResponseWriter, req *http.Request) {
-	name := req.URL.Query().Get("name")
+	name := req.URL.Query().Get("table")
 	result, err := a.dbClient.Table(name)
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)
@@ -75,7 +113,7 @@ func (a *API) Table(w http.ResponseWriter, req *http.Request) {
 
 // TableInfo ...
 func (a *API) TableInfo(w http.ResponseWriter, req *http.Request) {
-	name := req.URL.Query().Get("name")
+	name := req.URL.Query().Get("table")
 	result, err := a.dbClient.TableInfo(name)
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)
@@ -91,7 +129,7 @@ func (a *API) TableInfo(w http.ResponseWriter, req *http.Request) {
 
 // TableSQL ...
 func (a *API) TableSQL(w http.ResponseWriter, req *http.Request) {
-	name := req.URL.Query().Get("name")
+	name := req.URL.Query().Get("table")
 	result, err := a.dbClient.TableSql(name)
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)
@@ -106,7 +144,7 @@ func (a *API) TableSQL(w http.ResponseWriter, req *http.Request) {
 
 // TableIndexes ...
 func (a *API) TableIndexes(w http.ResponseWriter, req *http.Request) {
-	name := req.URL.Query().Get("name")
+	name := req.URL.Query().Get("table")
 	result, err := a.dbClient.TableIndexes(name)
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)

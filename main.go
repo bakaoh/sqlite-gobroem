@@ -34,21 +34,10 @@ func initServer() {
 		log.Fatal("can not open db", err)
 	}
 
-	http.HandleFunc("/api/info", api.Info)
-	http.HandleFunc("/api/table", api.Tables)
-	http.HandleFunc("/api/table/:name", api.Table)
-	http.HandleFunc("/api/table/:name/info", api.TableInfo)
-	http.HandleFunc("/api/table/:name/sql", api.TableSQL)
-	http.HandleFunc("/api/table/:name/indexes", api.TableIndexes)
-	http.HandleFunc("/api/query", api.Query)
-
-	fileServer := http.FileServer(&gobroem.AssetFS{
-		Asset:    gobroem.Asset,
-		AssetDir: gobroem.AssetDir,
-		Prefix:   "static",
-	})
-	http.Handle("/", http.StripPrefix("/", fileServer))
-	http.ListenAndServe(fmt.Sprintf("%s:%d", options.host, options.port), nil)
+	http.ListenAndServe(
+		fmt.Sprintf("%s:%d", options.host, options.port),
+		api.Handler("/browser/"),
+	)
 }
 
 // printHeader print the welcome header.
