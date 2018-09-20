@@ -1,6 +1,7 @@
 package gobroem
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -12,17 +13,26 @@ import (
 
 // API ...
 type API struct {
-	dbClient *DbClient
+	dbClient *sqlClient
 	dbFile   string
 }
 
 // NewAPI initializes the API controller with a DB file.
 func NewAPI(dbFile string) (*API, error) {
-	client, err := NewClient(dbFile)
+	client, err := newClient(dbFile)
 	if err != nil {
 		return nil, err
 	}
 	return &API{client, dbFile}, nil
+}
+
+// NewAPIFromDB initializes the API controller with a DB.
+func NewAPIFromDB(db *sql.DB) (*API, error) {
+	client, err := newClientFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	return &API{client, ""}, nil
 }
 
 // Handler ...
@@ -130,7 +140,7 @@ func (a *API) TableInfo(w http.ResponseWriter, req *http.Request) {
 // TableSQL ...
 func (a *API) TableSQL(w http.ResponseWriter, req *http.Request) {
 	name := req.URL.Query().Get("table")
-	result, err := a.dbClient.TableSql(name)
+	result, err := a.dbClient.TableSQL(name)
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)
 	}
@@ -162,7 +172,7 @@ func (a *API) Query(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := a.dbClient.Query(req.FormValue("query"))
+	result, err := a.dbClient.QuerySQL(req.FormValue("query"))
 	if err != nil {
 		renderError(w, http.StatusInternalServerError, err)
 		return

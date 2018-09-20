@@ -2,11 +2,11 @@ package gobroem
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"reflect"
 
-	"github.com/jmoiron/sqlx"
 	// include sqlite
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -20,63 +20,63 @@ const (
 	queryTableIndexes = `SELECT * FROM sqlite_master WHERE type='index' AND tbl_name='%s'`
 )
 
-type DbClient struct {
-	db      *sqlx.DB
-	DbFile  string
-	history []string
+// sqlClient is a wrapper around sqlx.DB
+type sqlClient struct {
+	*sql.DB
 }
 
-type Row []interface{}
+type sqlRow []interface{}
 
-type Result struct {
+type sqlResult struct {
 	Columns []string `json:"columns"`
-	Rows    []Row    `json:"rows"`
+	Rows    []sqlRow `json:"rows"`
 }
 
-func NewClient(file string) (*DbClient, error) {
-	db, err := sqlx.Open("sqlite3", file)
+func newClient(file string) (*sqlClient, error) {
+	db, err := sql.Open("sqlite3", file)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
-
-	return &DbClient{db: db, DbFile: file}, nil
+	return &sqlClient{db}, nil
 }
 
-func (client *DbClient) Info() (*Result, error) {
+func newClientFromDB(db *sql.DB) (*sqlClient, error) {
+	return &sqlClient{db}, nil
+}
+
+func (client *sqlClient) Info() (*sqlResult, error) {
 	return client.query(queryInfo)
 }
 
-func (client *DbClient) Tables() ([]string, error) {
+func (client *sqlClient) Tables() ([]string, error) {
 	return client.fetchRows(queryTables)
 }
 
-func (client *DbClient) TableInfo(table string) (*Result, error) {
+func (client *sqlClient) TableInfo(table string) (*sqlResult, error) {
 	return client.query(fmt.Sprintf(queryTableInfo, table))
 }
 
 // Table returns the table structure.
-func (client *DbClient) Table(table string) (*Result, error) {
+func (client *sqlClient) Table(table string) (*sqlResult, error) {
 	return client.query(fmt.Sprintf(queryTableSchema, table))
 }
 
-// TableSql returns the SQL used to create the given table.
-func (client *DbClient) TableSql(table string) ([]string, error) {
+// TableSQL returns the SQL used to create the given table.
+func (client *sqlClient) TableSQL(table string) ([]string, error) {
 	return client.fetchRows(fmt.Sprintf(queryTableSQL, table))
 }
 
 // TableIndexes returns the indexes for the given table.
-func (client *DbClient) TableIndexes(table string) (*Result, error) {
+func (client *sqlClient) TableIndexes(table string) (*sqlResult, error) {
 	return client.query(fmt.Sprintf(queryTableIndexes, table))
 }
 
-func (client *DbClient) Query(query string) (*Result, error) {
-	client.recordQuery(query)
+func (client *sqlClient) QuerySQL(query string) (*sqlResult, error) {
 	return client.query(query)
 }
 
-func (db *DbClient) query(query string, args ...interface{}) (*Result, error) {
-	rows, err := db.db.Queryx(query, args...)
+func (client *sqlClient) query(query string, args ...interface{}) (*sqlResult, error) {
+	rows, err := client.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +87,10 @@ func (db *DbClient) query(query string, args ...interface{}) (*Result, error) {
 		return nil, err
 	}
 
-	result := &Result{Columns: columns}
+	result := &sqlResult{Columns: columns}
 
 	for rows.Next() {
-		cols, err := rows.SliceScan()
+		cols, err := SliceScan(rows)
 		if err != nil {
 			continue
 		}
@@ -113,9 +113,39 @@ func (db *DbClient) query(query string, args ...interface{}) (*Result, error) {
 	return result, nil
 }
 
+// SliceScan a row, returning a []interface{} with values similar to MapScan.
+// This function is primarily intended for use where the number of columns
+// is not known.  Because you can pass an []interface{} directly to Scan,
+// it's recommended that you do that as it will not have to allocate new
+// slices per row.
+func SliceScan(r *sql.Rows) ([]interface{}, error) {
+	// ignore r.started, since we needn't use reflect for anything.
+	columns, err := r.Columns()
+	if err != nil {
+		return []interface{}{}, err
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	err = r.Scan(values...)
+
+	if err != nil {
+		return values, err
+	}
+
+	for i := range columns {
+		values[i] = *(values[i].(*interface{}))
+	}
+
+	return values, r.Err()
+}
+
 // fetchRows return a string slice of all rows for the first column in the
 // query result.
-func (client *DbClient) fetchRows(query string) ([]string, error) {
+func (client *sqlClient) fetchRows(query string) ([]string, error) {
 	res, err := client.query(query)
 	if err != nil {
 		return nil, err
@@ -131,14 +161,9 @@ func (client *DbClient) fetchRows(query string) ([]string, error) {
 	return results, nil
 }
 
-// recordQuery adds the query to the query history.
-func (client *DbClient) recordQuery(query string) {
-	client.history = append(client.history, query)
-}
-
 // Format returns a slice of maps. The key in the map represents the column name
 // and the value is the row content.
-func (res *Result) Format() []map[string]interface{} {
+func (res *sqlResult) Format() []map[string]interface{} {
 	var items []map[string]interface{}
 
 	for _, row := range res.Rows {
@@ -153,7 +178,7 @@ func (res *Result) Format() []map[string]interface{} {
 	return items
 }
 
-func (res *Result) CSV() []byte {
+func (res *sqlResult) CSV() []byte {
 	buf := new(bytes.Buffer)
 	writer := csv.NewWriter(buf)
 

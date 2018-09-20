@@ -10,7 +10,7 @@ import (
 	"github.com/bakaoh/sqlite-gobroem/gobroem"
 )
 
-const version = "0.0.1"
+const version = "0.1.0"
 
 var options struct {
 	db   string
@@ -18,17 +18,21 @@ var options struct {
 	port uint
 }
 
-// initConfig ...
+// printHeader print the welcome header.
+func printHeader() {
+	fmt.Fprintf(os.Stdout, "sqlite gobroem, v%s\n", version)
+}
+
+// initConfig parse CLI config
 func initConfig() {
-	options.db = *flag.String("db", "/home/taitt/Downloads/item.db", "SQLite database file")
+	options.db = *flag.String("db", "test/test.db", "SQLite database file")
 	options.host = *flag.String("bind", "localhost", "HTTP server host")
 	options.port = *flag.Uint("listen", 8000, "HTTP server listen port")
 	flag.Parse()
 }
 
-// initServer initialize and start the web server.
-func initServer() {
-	// Initialize the API controller
+// startServer initialize and start the web server.
+func startServer() {
 	api, err := gobroem.NewAPI(options.db)
 	if err != nil {
 		log.Fatal("can not open db", err)
@@ -36,17 +40,12 @@ func initServer() {
 
 	http.ListenAndServe(
 		fmt.Sprintf("%s:%d", options.host, options.port),
-		api.Handler("/browser/"),
+		api.Handler("/"),
 	)
-}
-
-// printHeader print the welcome header.
-func printHeader() {
-	fmt.Fprintf(os.Stdout, "sqlite gobroem, v%s\n", version)
 }
 
 func main() {
 	printHeader()
 	initConfig()
-	initServer()
+	startServer()
 }
