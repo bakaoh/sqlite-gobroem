@@ -328,6 +328,7 @@ getColumnsFromIndexSql = function(name, sql) {
   i = sql.indexOf('"' + name + '"');
   sql = sql.slice(i + 1, sql.length - 1);
   matches = sql.match(/(\"[\w\s]+\")/g);
+  if (!matches) return [];
   result = (function() {
     var _i, _len, _results;
     _results = [];

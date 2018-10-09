@@ -20,7 +20,7 @@ const (
 	queryTableIndexes = `SELECT * FROM sqlite_master WHERE type='index' AND tbl_name='%s'`
 )
 
-// sqlClient is a wrapper around sqlx.DB
+// sqlClient is a wrapper around sql.DB
 type sqlClient struct {
 	*sql.DB
 }
