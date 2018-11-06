@@ -40,7 +40,7 @@ func startServer() {
 
 	http.ListenAndServe(
 		fmt.Sprintf("%s:%d", options.host, options.port),
-		api.Handler("/"),
+		api.Handler("/", "/static/"),
 	)
 }
 

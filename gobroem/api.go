@@ -36,12 +36,12 @@ func NewAPIFromDB(db *sql.DB) (*API, error) {
 }
 
 // Handler ...
-func (a *API) Handler(browserRoot string) http.Handler {
+func (a *API) Handler(browserRoot string, staticRoot string) http.Handler {
 	indexPage, _ := Asset("static/index.html")
 	indexTmpl, _ := template.New("name").Parse(string(indexPage))
 
 	fileServer := http.FileServer(&AssetFS{AssetDir, Asset, "static"})
-	staticHandler := http.StripPrefix(browserRoot, fileServer)
+	staticHandler := http.StripPrefix(staticRoot, fileServer)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -60,9 +60,9 @@ func (a *API) Handler(browserRoot string) http.Handler {
 		case browserRoot + "api/query":
 			a.Query(w, r)
 		case browserRoot:
-			indexTmpl.Execute(w, map[string]string{"root": browserRoot})
+			indexTmpl.Execute(w, map[string]string{"root": browserRoot, "static": staticRoot})
 		default:
-			fileName := strings.Replace(r.URL.Path, browserRoot, "static/", 1)
+			fileName := strings.Replace(r.URL.Path, staticRoot, "static/", 1)
 			if _, err := Asset(fileName); err == nil {
 				staticHandler.ServeHTTP(w, r)
 			} else {
